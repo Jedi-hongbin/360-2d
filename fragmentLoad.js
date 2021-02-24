@@ -116,6 +116,36 @@ function clearTimer() {
   timer = null;
 }
 
+async function firstLoadFragmentRequest() {
+  const shouldLoadSourceIndex = Array.from(
+    { length: sourceLength },
+    (_, i) => i
+  ).filter((_, index) => (index % LoadFragment === 0 ? index : false));
+  //根据分成片段的数组发送请求
+  console.log(shouldLoadSourceIndex);
+
+  for (const index of shouldLoadSourceIndex) {
+    const sourceNumber = index.toString().padStart(3, "0");
+    const url = `https://media.emeralds.com/stone/E1526/video360/E1526-video360-${sourceNumber}-Medium.jpg?1`;
+    // const imageBlob = await requestImageBlob(url);
+    const request = await fetch(url, { responseType: "blob" });
+    const imageBlob = await request.blob();
+
+    if (imageBlob) {
+      const image = generateImage(imageBlob);
+      console.log("image:", image);
+      //   sources[index] = image;
+      drawSource(image);
+      sourceIndex = index;
+    }
+    // 进度条变化
+    const currentSourcesLength = Object.keys(sources).length;
+    const progress =
+      ((currentSourcesLength / sourceLength) % sourceLength) * 100;
+    progressbar.style["width"] = progress + "%";
+  }
+}
+
 // canvas绘制图片
 function drawSource(image) {
   const { width, height } = canvasProperties;
@@ -211,33 +241,6 @@ function computedNextSourcesIndex(
   return allowValue ? nextIndex : nextIndex < 1 ? sourcesLength : 1;
 }
 
-async function firstLoadFragmentRequest() {
-  const shouldLoadSourceIndex = Array.from(
-    { length: sourceLength },
-    (_, i) => i
-  ).filter((_, index) => (index % LoadFragment === 0 ? index : false));
-  //根据分成片段的数组发送请求
-  console.log(shouldLoadSourceIndex);
-
-  for (const index of shouldLoadSourceIndex) {
-    const sourceNumber = index.toString().padStart(3, "0");
-    const url = `https://media.emeralds.com/stone/E1526/video360/E1526-video360-${sourceNumber}-Medium.jpg?1`;
-    const imageBlob = await requestImageBlob(url);
-    if (imageBlob) {
-      const image = generateImage(imageBlob);
-      sources[index] = image;
-      // drawSource(image);
-      // sourceIndex = index;
-      toggleSource(index);
-    }
-    // 进度条变化
-    const currentSourcesLength = Object.keys(sources).length;
-    const progress =
-      ((currentSourcesLength / sourceLength) % sourceLength) * 100;
-    progressbar.style["width"] = progress + "%";
-  }
-}
-
 function fillContainer() {
   const containerStyles = {
     position: "relative",
@@ -279,4 +282,8 @@ function computedBreakpoint(index) {
   const big = (index + 1) * promiseLimit;
   const end = big <= sourceLength ? big : sourceLength;
   return { start, end };
+}
+
+function manualSwitch() {
+  toggleSource(4);
 }

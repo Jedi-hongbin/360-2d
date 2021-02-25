@@ -44,16 +44,18 @@ const canvas = document.getElementById(canvasProperties.id);
 const canvasContext = canvas.getContext("2d");
 
 // getSources();
-// breakpointRequest();
-firstLoadFragmentRequest();
-// 添加监听
-canvas.addEventListener("mousedown", starDrag);
-canvas.addEventListener("mouseup", stopDrag);
-canvas.addEventListener("mouseleave", stopDrag);
-// 移动端事件
-canvas.addEventListener("touchstart", starDrag);
-canvas.addEventListener("touchend", stopDrag);
-canvas.addEventListener("touchleave", stopDrag);
+breakpointRequest();
+
+function Drag() {
+  // 添加监听
+  canvas.addEventListener("mousedown", starDrag);
+  canvas.addEventListener("mouseup", stopDrag);
+  canvas.addEventListener("mouseleave", stopDrag);
+  // 移动端事件
+  canvas.addEventListener("touchstart", starDrag);
+  canvas.addEventListener("touchend", stopDrag);
+  canvas.addEventListener("touchleave", stopDrag);
+}
 
 function starDrag(e) {
   e.preventDefault();
@@ -137,35 +139,43 @@ function requestSource(url, index, end) {
     .then((imageBlob) => {
       const image = generateImage(imageBlob);
       sources[index] = image;
-      const currentSourcesLength = Object.keys(sources).length;
-      // 进度条变化
-      const progress =
-        ((currentSourcesLength / sourceLength) % sourceLength) * 100;
-      progressbar.style["width"] = progress + "%";
-      if (currentSourcesLength === sourceLength) {
-        handleRequestComplete();
+      const sourcesKeys = Object.keys(sources);
+      const currentSourcesLength = sourcesKeys.length;
+      progressBarProgress(currentSourcesLength);
+      //有一定条数连续的数据，开始播放
+      computedPlay(sourcesKeys, index);
+      // 当执行完当前分段时
+      if (index === end) {
+        ++currentBreakpoint < batches && breakpointRequest();
       }
-      //20条开始连续数据，开始播放，
-      if (currentSourcesLength >= AllowedPlayLength) {
-        const Keys = Object.keys(sources);
-        const continuousArr = Keys.filter((key) => key <= index);
-        // 如果当前所有的图片是连续的，那就开始播放
-        if (continuousArr.length === index) {
-          canBePlayLength = index;
-          autoPlay(sourceIndex);
-        }
-      }
-      if (end === index) {
-        // 当执行完当前分段时
-        ++currentBreakpoint;
-        if (currentBreakpoint < batches) {
-          breakpointRequest();
-        }
-      }
+      // 如果全部请求完毕
+      currentSourcesLength === sourceLength && handleRequestComplete();
     })
     .catch((err) => {
       console.log.error("err-", index, err);
     });
+}
+
+// 加载进度条进度变化
+function progressBarProgress(currentSourcesLength) {
+  const progress = ((currentSourcesLength / sourceLength) % sourceLength) * 100;
+  progressbar.style["width"] = progress + "%";
+}
+
+//判断是否有可播放资源
+function computedPlay(sourcesKeys, currentSourceIndex) {
+  const currentSourcesLength = sourcesKeys.length;
+
+  if (currentSourcesLength < AllowedPlayLength) return;
+
+  const { length } = sourcesKeys.filter((key) => key <= currentSourceIndex);
+  // 如果当前位置以前所有的图片是连续的，那就开始播放
+  if (length === currentSourceIndex) {
+    // 设置可以播放source的长度
+    canBePlayLength = currentSourceIndex;
+    console.log(timer);
+    autoPlay(sourceIndex);
+  }
 }
 
 function generateImage(bold) {
@@ -180,6 +190,8 @@ function handleRequestComplete() {
   autoPlay(sourceIndex);
   // 隐藏进度条
   progressbar.style["opacity"] = 0;
+  // 允许手势拖拽
+  Drag();
 }
 
 function requestImageBlob(url) {
@@ -209,33 +221,6 @@ function computedNextSourcesIndex(
   const allowValue = nextIndex <= sourcesLength && nextIndex >= 1;
 
   return allowValue ? nextIndex : nextIndex < 1 ? sourcesLength : 1;
-}
-
-async function firstLoadFragmentRequest() {
-  const shouldLoadSourceIndex = Array.from(
-    { length: sourceLength },
-    (_, i) => i
-  ).filter((_, index) => (index % LoadFragment === 0 ? index : false));
-  //根据分成片段的数组发送请求
-  console.log(shouldLoadSourceIndex);
-
-  for (const index of shouldLoadSourceIndex) {
-    const sourceNumber = index.toString().padStart(3, "0");
-    const url = `https://media.emeralds.com/stone/E1526/video360/E1526-video360-${sourceNumber}-Medium.jpg?1`;
-    const imageBlob = await requestImageBlob(url);
-    if (imageBlob) {
-      const image = generateImage(imageBlob);
-      sources[index] = image;
-      // drawSource(image);
-      // sourceIndex = index;
-      toggleSource(index);
-    }
-    // 进度条变化
-    const currentSourcesLength = Object.keys(sources).length;
-    const progress =
-      ((currentSourcesLength / sourceLength) % sourceLength) * 100;
-    progressbar.style["width"] = progress + "%";
-  }
 }
 
 function fillContainer() {

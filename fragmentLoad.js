@@ -3,6 +3,7 @@ let prevMoveOrigin = null; // 上次移动的点坐标
 let sourceIndex = 1; // 当前播放的资源索引
 let requestCompleted = false; // 请求是否完毕
 let canBePlayLength = 0; // 加载期间 可以连续播放的数据长度
+let requestsCompletedNumber = 0; // 记录当前分段是否请求完成(请求的次数)，请求完成再开始下一段数据请求
 // value是Image元素src为请求的图片blob，key是对应的索引
 const sources = {};
 const timeout = 50; //自动播放的速度,时间间隔
@@ -12,7 +13,7 @@ const promiseLimit = 20; // 同时请求次数
 let currentBreakpoint = 0; // 当前请求在第几段
 const batches = Math.ceil(sourceLength / promiseLimit);
 const AllowedPlayLength = 0; // 当有多少张图片获取到时开始播放
-const LoadFragment = 4; // 第一次加载时间隔几个数据优先加载展示
+const LoadFragment = 5; // 第一次加载时间隔几个数据优先加载展示
 const canvasProperties = {
   id: "canvas",
   width: 365,
@@ -116,27 +117,29 @@ function clearTimer() {
   timer = null;
 }
 
+function sourceUrl(num) {
+  const sourceNumber = num.toString().padStart(3, "0");
+  const url = `https://media.emeralds.com/stone/E1526/video360/E1526-video360-${sourceNumber}-Medium.jpg?1`;
+  return url;
+}
+
 async function firstLoadFragmentRequest() {
   const shouldLoadSourceIndex = Array.from(
     { length: sourceLength },
     (_, i) => i
   ).filter((_, index) => (index % LoadFragment === 0 ? index : false));
   //根据分成片段的数组发送请求
-  console.log(shouldLoadSourceIndex);
-
   for (const index of shouldLoadSourceIndex) {
-    const sourceNumber = index.toString().padStart(3, "0");
-    const url = `https://media.emeralds.com/stone/E1526/video360/E1526-video360-${sourceNumber}-Medium.jpg?1`;
-    // const imageBlob = await requestImageBlob(url);
-    const request = await fetch(url, { responseType: "blob" });
-    const imageBlob = await request.blob();
+    const url = sourceUrl(index);
+    const imageBlob = await requestImageBlob(url);
 
     if (imageBlob) {
       const image = generateImage(imageBlob);
-      console.log("image:", image);
-      //   sources[index] = image;
-      drawSource(image);
-      sourceIndex = index;
+      image.onload = () => {
+        sources[index] = image;
+        drawSource(image);
+        sourceIndex = index;
+      };
     }
     // 进度条变化
     const currentSourcesLength = Object.keys(sources).length;
@@ -144,6 +147,8 @@ async function firstLoadFragmentRequest() {
       ((currentSourcesLength / sourceLength) % sourceLength) * 100;
     progressbar.style["width"] = progress + "%";
   }
+  // 加载全部图片
+  breakpointRequest();
 }
 
 // canvas绘制图片
@@ -154,48 +159,67 @@ function drawSource(image) {
 
 // 请求一段数据
 function breakpointRequest() {
+  requestsCompletedNumber++;
   const { start, end } = computedBreakpoint(currentBreakpoint);
-  for (let num = start; num <= end; num++) {
-    const sourceNumber = num.toString().padStart(3, "0");
+  for (let index = start; index <= end; index++) {
+    const sourceNumber = index.toString().padStart(3, "0");
     const url = `https://media.emeralds.com/stone/E1526/video360/E1526-video360-${sourceNumber}-Medium.jpg?1`;
-    requestSource(url, num, end);
+    requestSource(url, index, end);
   }
 }
 
 function requestSource(url, index, end) {
-  requestImageBlob(url)
-    .then((imageBlob) => {
-      const image = generateImage(imageBlob);
-      sources[index] = image;
-      const currentSourcesLength = Object.keys(sources).length;
-      // 进度条变化
-      const progress =
-        ((currentSourcesLength / sourceLength) % sourceLength) * 100;
-      progressbar.style["width"] = progress + "%";
-      if (currentSourcesLength === sourceLength) {
-        handleRequestComplete();
-      }
-      //20条开始连续数据，开始播放，
-      if (currentSourcesLength >= AllowedPlayLength) {
-        const Keys = Object.keys(sources);
-        const continuousArr = Keys.filter((key) => key <= index);
-        // 如果当前所有的图片是连续的，那就开始播放
-        if (continuousArr.length === index) {
-          canBePlayLength = index;
-          autoPlay(sourceIndex);
-        }
-      }
-      if (end === index) {
-        // 当执行完当前分段时
-        ++currentBreakpoint;
-        if (currentBreakpoint < batches) {
-          breakpointRequest();
-        }
-      }
-    })
-    .catch((err) => {
-      console.log.error("err-", index, err);
-    });
+  if (!Object.keys(sources).includes(String(index))) {
+    requestImageBlob(url)
+      .then((imageBlob) => {
+        const image = generateImage(imageBlob);
+        sources[index] = image;
+        //计算当前这条数据和之前的数据是连续的 则播放到这条数据的位置
+        computedPlay(index);
+        handleRequestSource(end);
+      })
+      .catch((err) => {
+        console.log.error("err-", index, err);
+        handleRequestSource(end);
+      });
+  } else handleRequestSource(end);
+}
+
+// 不管图片请求成功还是失败都要执行的操作
+function handleRequestSource(end) {
+  // 进度条
+  progressBarProgress();
+  // if 执行完当前分段的所有数据
+  if (requestsCompletedNumber === end) {
+    ++currentBreakpoint < batches && breakpointRequest();
+  }
+  // 如果全部请求完毕
+  requestsCompletedNumber === sourceLength && handleRequestComplete();
+  requestsCompletedNumber++;
+}
+
+// 加载进度条进度变化
+function progressBarProgress() {
+  const currentSourcesLength = Object.keys(sources).length;
+  const progress = ((currentSourcesLength / sourceLength) % sourceLength) * 100;
+  progressbar.style["width"] = progress + "%";
+}
+
+//判断是否有可播放资源
+function computedPlay(currentSourceIndex) {
+  const sourcesKeys = Object.keys(sources);
+  const currentSourcesLength = sourcesKeys.length;
+
+  if (currentSourcesLength < AllowedPlayLength) return;
+
+  const { length } = sourcesKeys.filter((key) => key <= currentSourceIndex);
+  // 如果当前位置以前所有的图片是连续的，那就开始播放
+  if (length === currentSourceIndex) {
+    // 设置可以播放source的长度
+    canBePlayLength = currentSourceIndex;
+    // 当前如果播放则不用再播放
+    !timer && autoPlay(sourceIndex);
+  }
 }
 
 function generateImage(bold) {
@@ -207,7 +231,7 @@ function generateImage(bold) {
 
 function handleRequestComplete() {
   requestCompleted = true;
-  autoPlay(sourceIndex);
+  !timer && autoPlay(sourceIndex);
   // 隐藏进度条
   progressbar.style["opacity"] = 0;
 }
@@ -282,8 +306,4 @@ function computedBreakpoint(index) {
   const big = (index + 1) * promiseLimit;
   const end = big <= sourceLength ? big : sourceLength;
   return { start, end };
-}
-
-function manualSwitch() {
-  toggleSource(4);
 }

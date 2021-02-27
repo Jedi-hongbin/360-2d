@@ -6,8 +6,30 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Document</title>
   </head>
-  <body></body>
+  <body>
+    <button onclick="request()">request</button>
+    <button onclick="setTimer()">set Timer</button>
+    <button onclick="setTwiceTimer()">set TwiceTimer</button>
+    <button onclick="retrieveT()">retrieve Timer</button>
+  </body>
 
   <!-- <script src="index.js"></script> -->
   <script src="fragmentLoad.js"></script>
+  <script>
+    let t = null;
+
+    function setTimer() {
+      clearTimeout(t);
+      t = setTimeout(retrieveT, 300);
+    }
+
+    function setTwiceTimer() {
+      setTimer();
+      setTimer();
+    }
+
+    function retrieveT() {
+      console.log(`t -> ${t}`);
+    }
+  </script>
 </html>

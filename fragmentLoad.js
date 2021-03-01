@@ -24,7 +24,7 @@ const containerProperties = { id: "canvas_container" };
 const defaultImageUrl =
   "https://media.emeralds.com/stone/E1526/video360/E1526-video360-001-Medium.jpg?1";
 // 显示默认图片
-// drawDefaultImage();
+drawDefaultImage();
 const defaultSource = new Image();
 defaultSource.src = defaultImageUrl;
 defaultSource.onload = () => drawSource(defaultSource);
@@ -32,7 +32,9 @@ defaultSource.onload = () => drawSource(defaultSource);
 const container = document.createElement("div");
 container.id = containerProperties.id;
 // 先插入到dom中然后才能ById获取
+// shopify中不使用下面这行代码插入
 document.getElementsByTagName("body")[0].appendChild(container);
+// 放到shopify中可以用以下代码添加到节点中
 // document
 //   .getElementById("ProductSection-product-template")
 //   .getElementsByClassName(
@@ -127,7 +129,25 @@ function sourceUrl(num) {
   return url;
 }
 
+function onlyRequestSource() {
+  for (let index = 1; index <= sourceLength; index++) {
+    const sourceNumber = index.toString().padStart(3, "0");
+    const url = `https://media.emeralds.com/stone/E1526/video360/E1526-video360-${sourceNumber}-Medium.jpg?1`;
+    requestImageBlob(url)
+      .then((blob) => {
+        const image = generateImage(blob);
+        sources[index] = image;
+        console.log(index);
+      })
+      .catch((err) => {
+        console.error(`${index}:`, err);
+      });
+  }
+  console.log("同步");
+}
+firstLoadFragmentRequest();
 async function firstLoadFragmentRequest() {
+  //加载片段同时发起请求
   const shouldLoadSourceIndex = Array.from(
     { length: sourceLength },
     (_, i) => i
@@ -146,10 +166,7 @@ async function firstLoadFragmentRequest() {
       };
     }
     // 进度条变化
-    const currentSourcesLength = Object.keys(sources).length;
-    const progress =
-      ((currentSourcesLength / sourceLength) % sourceLength) * 100;
-    progressbar.style["width"] = progress + "%";
+    progressBarProgress();
   }
   // 加载全部图片
   breakpointRequest();
@@ -160,7 +177,7 @@ function drawSource(image) {
   const { width, height } = canvasProperties;
   canvasContext.drawImage(image, 0, 0, width, height);
 }
-breakpointRequest();
+// breakpointRequest();
 // 请求一段数据
 function breakpointRequest() {
   requestsCompletedNumber++;
@@ -172,25 +189,29 @@ function breakpointRequest() {
     requestSource(url, index, end);
   }
 }
-let date = +new Date();
+
+let date = +new Date(); //测试每请求到图片，距离上次请求相应所间隔的时间
+
 function requestSource(url, index, end) {
-  //   if (!Object.keys(sources).includes(String(index))) {
-  requestImageBlob(url)
-    .then((imageBlob) => {
-      const image = generateImage(imageBlob);
-      sources[index] = image;
-      //计算当前这条数据和之前的数据是连续的 则播放到这条数据的位置
-      computedPlay(index);
-      handleRequestSource(end);
-      const currentDate = +new Date();
-      console.log(index + "-->", currentDate - date);
-      date = currentDate;
-    })
-    .catch((err) => {
-      console.error("err-", index, err);
-      handleRequestSource(end);
-    });
-  //   } else handleRequestSource(end);
+  const haveRequestedThisSource = Object.keys(sources).includes(String(index));
+  if (!haveRequestedThisSource) {
+    requestImageBlob(url)
+      .then((imageBlob) => {
+        const image = generateImage(imageBlob);
+        sources[index] = image;
+        //计算当前这条数据和之前的数据是连续的 则播放到这条数据的位置
+        computedPlay(index);
+        handleRequestSource(end);
+        // 测试时间
+        const currentDate = +new Date();
+        console.log(index + "-->", currentDate - date);
+        date = currentDate;
+      })
+      .catch((err) => {
+        console.error("err-", index, err);
+        handleRequestSource(end);
+      });
+  } else handleRequestSource(end);
 }
 
 // 不管图片请求成功还是失败都要执行的操作
@@ -320,65 +341,17 @@ function computedBreakpoint(index) {
   return { start, end };
 }
 
-function request() {
-  fetch("http://localhost:4000/api/source/001")
-    .then((res) => res.blob())
-    .then((res) => {
-      if (!res) return;
-      const image = new Image();
-      const canvas = document.createElement("canvas");
-      canvas.width = 365;
-      canvas.height = 365;
-      canvas.style.border = "1px solid #ccc";
-
-      document.body.appendChild(canvas);
-      const ctx = canvas.getContext("2d");
-      //   const fileUrl = URL.createObjectURL(res);
-      //   URL.revokeObjectURL(fileUrl);
-      const reader = new FileReader();
-      reader.readAsDataURL(res);
-      reader.addEventListener("load", ({ target: { result } }) => {
-        image.src = result;
-        image.onload = () => {
-          ctx.drawImage(image, 0, 0, 365, 365);
-        };
-      });
-    })
-    .catch((err) => {
-      console.log("err", err);
-    });
-}
-
-/**
- * @param {*} imgData 图片对象
- * @param {*} str     图片下载到本地的文件名
- * @param {*} type    图片下载到本地的类型
- */
-// function commonDownloads(blob, name, type) {
-//   try {
-//     if (window.navigator && window.navigator.msSaveOrOpenBlob) {
-//       // 兼容ie
-//       window.navigator.msSaveOrOpenBlob(blob, name);
-//     } else {
-//       const downloadElement = document.createElement("a");
-//       downloadElement.innerHTML = `${name} download`;
-//       downloadElement.style["margin"] = "2px 2px";
-//       downloadElement.style["display"] = "block";
-//       const href = window.URL.createObjectURL(blob); // 静态方法会创建一个 DOMnameing，其中包含一个表示参数中给出的对象的URL。这个 URL 的生命周期和创建它的窗口中的 document 绑定。这个新的URL 对象表示指定的 File 对象或 Blob 对象
-//       downloadElement.href = href;
-//       downloadElement.download = name;
-//       document.body.appendChild(downloadElement);
-//       downloadElement.click();
-//       document.body.removeChild(downloadElement);
-//       window.URL.revokeObjectURL(href); // 释放之前已经存在的、通过调用 URL.createObjectURL() 创建的 URL 对象。当你结束使用某个 URL 对象之后，应该通过调用这个方法来让浏览器知道不用在内存中继续保留对这个文件的引用了。
-//     }
-//   } catch (error) {
-//     console.error("download err -> ", error);
-//   }
-// }
-// function imageDownload(blob, index) {
-//   const name = `${index.toString().padStart(3, "0")}.png`;
-//   const type =
-//     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=utf-8";
-//   commonDownloads(blob, name, type);
+// function requestImage(url) {
+//   return new Promise((resolve) => {
+//     fetch(url, { responseType: "blob" })
+//       .then((res) => res.blob())
+//       .then((blob) => {
+//         const image = generateImage(blob);
+//         image.addEventListener("load", () => resolve(image));
+//       })
+//       .catch((err) => {
+//         console.err("err ss", err);
+//         reject();
+//       });
+//   });
 // }
